@@ -2,10 +2,15 @@ import telebot
 from telebot import types
 import sqlite3
 import os
+from flask import Flask, request, jsonify
+import threading
 
-BOT_TOKEN = '9146096363:AAHX37me1Ldn--AXIQrFGirHcH9iEMeEBx4' 
+# قراءة التوكن من إعدادات Render
+BOT_TOKEN = os.environ.get('BOT_TOKEN', 'ضع_التوكن_هنا_كاحتياط')
 bot = telebot.TeleBot(BOT_TOKEN)
+app = Flask(__name__)
 
+# إعداد قاعدة البيانات
 def init_db():
     conn = sqlite3.connect('zideot.db')
     c = conn.cursor()
@@ -74,12 +79,11 @@ def send_welcome(message):
     referrals = user[2] if user else 0
 
     markup = types.InlineKeyboardMarkup()
-    
+    # الرابط هيتم تحديثه لرابط Render
     btn_app = types.InlineKeyboardButton(
         text="🔥 فتح التطبيق ومشاهدة الإعلانات", 
-        web_app=types.WebAppInfo(url=f"https://zideot-tron-karim.netlify.app/?balance={balance}&refs={referrals}") 
+        web_app=types.WebAppInfo(url=f"https://zideot-tron-karim.netlify.app/?balance={balance}&refs={referrals}&user_id={user_id}") 
     )
-    
     btn_balance = types.InlineKeyboardButton("💳 عرض رصيدي الحالي", callback_data="check_balance")
     btn_refs = types.InlineKeyboardButton("👥 عرض إحالاتي", callback_data="check_refs")
     
@@ -96,40 +100,12 @@ def send_welcome(message):
 
     welcome_text = (
         f"👋 **أهلاً بك في Zideot Tron!** 🚀\n\n"
-        f"🌟 مرحباً بك في منصة الأرباح الأسرع! هل أنت مستعد لزيادة أرباحك من خلال مشاهدة الإعلانات؟\n\n"
+        f"🌟 مرحباً بك في منصة الأرباح الأسرع!\n\n"
         f"⚡️ **ملاحظة:** كل 100 إعلان تعادل 1.0000000 TRX\n"
         f"👥 **الإحالات:** كل 100 إحالة تعادل 1.0000000 TRX\n\n"
-        f"👇 اضغط على الأزرار أدناه للبدء واكتشاف رصيدك:"
+        f"👇 اضغط على الأزرار أدناه للبدء:"
     )
-    
     bot.send_message(message.chat.id, welcome_text, parse_mode='Markdown', reply_markup=markup)
-
-# استقبال البيانات الرسمية من الموقع
-@bot.message_handler(content_types=['web_app_data'])
-def handle_web_app_data(message):
-    try:
-        import json
-        data = json.loads(message.web_app_data.data)
-        if data.get("action") == "add_points":
-            amount = data.get("amount", 0.01)
-            user_id = message.from_user.id
-            add_points(user_id, amount)
-            user = get_user(user_id)
-            new_balance = user[1]
-            
-            markup = types.InlineKeyboardMarkup()
-            btn_balance = types.InlineKeyboardButton("💳 عرض الرصيد الحالي", callback_data="check_balance")
-            markup.add(btn_balance)
-
-            text = (
-                f"✅ **تمت إضافة المكافأة بنجاح!**\n\n"
-                f"💰 تم إضافة: `+{amount:.7f} TRX` إلى حسابك.\n"
-                f"💎 إجمالي رصيدك: `{new_balance:.7f} TRX`\n\n"
-                f"شكراً لك! استمر في الربح 🚀"
-            )
-            bot.send_message(message.chat.id, text, parse_mode='Markdown', reply_markup=markup)
-    except Exception as e:
-        print(f"Error: {e}")
 
 @bot.callback_query_handler(func=lambda call: call.data == "check_balance")
 def callback_balance(call):
@@ -145,5 +121,45 @@ def callback_refs(call):
     refs = user[2] if user else 0
     bot.answer_callback_query(call.id, f"👥 عدد إحالاتك: {refs}\n\n(كل 100 إحالة = 1.0000000 TRX)", show_alert=True)
 
-print("البوت يعمل الآن...")
-bot.infinity_polling()
+# ===== مسار الـ API =====
+@app.route('/api/add_points', methods=['POST'])
+def api_add_points():
+    try:
+        data = request.json
+        user_id = int(data.get('user_id'))
+        amount = float(data.get('amount', 0.01))
+        
+        add_points(user_id, amount)
+        user = get_user(user_id)
+        new_balance = user[1]
+        
+        markup = types.InlineKeyboardMarkup()
+        btn_balance = types.InlineKeyboardButton("💳 عرض الرصيد", callback_data="check_balance")
+        markup.add(btn_balance)
+        
+        text = (
+            f"✅ **تمت إضافة المكافأة بنجاح!**\n\n"
+            f"💰 تم إضافة: `+{amount:.7f} TRX` إلى حسابك.\n"
+            f"💎 إجمالي رصيدك: `{new_balance:.7f} TRX`\n\n"
+            f"استمر في الربح! 🚀"
+        )
+        bot.send_message(user_id, text, parse_mode='Markdown', reply_markup=markup)
+        
+        return jsonify({"status": "success", "new_balance": new_balance}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/')
+def index():
+    return "Bot API is running!"
+
+# تشغيل البوت في الخلفية عشان يشتغل مع السيرفر
+def run_polling():
+    bot.infinity_polling()
+
+# بدء تشغيل البوت
+threading.Thread(target=run_polling, daemon=True).start()
+
+if __name__ == "__main__":
+    port = int(os.environ.get('PORT', 8080))
+    app.run(host='0.0.0.0', port=port)
