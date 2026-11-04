@@ -149,6 +149,13 @@ def api_add_points():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@app.route("/api/get_user/<int:user_id>", methods=["GET"])
+def api_get_user(user_id):
+    user = get_user(user_id)
+    if user:
+        return jsonify({"status": "success", "balance": user[1], "referrals": user[2]}), 200
+    return jsonify({"status": "not_found", "balance": 0.0, "referrals": 0}), 200
+
 @app.route('/')
 def index():
     return "Bot API is running!"

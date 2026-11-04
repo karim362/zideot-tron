@@ -5,14 +5,36 @@ window.addEventListener('load', function() {
     const BLOCK_ID = "57861"; 
     
     const urlParams = new URLSearchParams(window.location.search);
-    let currentBalance = parseFloat(urlParams.get('balance') || 0.0000000);
-    let refsCount = parseInt(urlParams.get('refs') || 0);
+    // نعتمد على الآي دي اللي جاي من تيليجرام
+    let userId = tg?.initDataUnsafe?.user?.id || urlParams.get('user_id');
+    
+    let currentBalance = 0.0000000;
+    let refsCount = 0;
     const REWARD_AMOUNT = 0.01;
 
     function updateUI() {
         const balanceEl = document.getElementById('balance');
         if (balanceEl) balanceEl.innerText = currentBalance.toFixed(7);
     }
+
+    // جلب الرصيد الحقيقي من السيرفر
+    async function fetchBalanceFromServer() {
+        if (!userId) return;
+        try {
+            const response = await fetch(`https://zideot-tron.onrender.com/api/get_user/${userId}`);
+            const data = await response.json();
+            if (data.status === 'success') {
+                currentBalance = data.balance;
+                refsCount = data.referrals;
+                updateUI();
+            }
+        } catch (e) {
+            console.log("خطأ في جلب الرصيد:", e);
+        }
+    }
+
+    // تشغيل جلب الرصيد بمجرد فتح التطبيق
+    fetchBalanceFromServer();
 
     const watchAdBtn = document.getElementById('watchAdBtn');
     const showBalanceBtn = document.getElementById('showBalanceBtn');
@@ -46,16 +68,12 @@ window.addEventListener('load', function() {
                     if(statusMessage) statusMessage.innerText = `🎉 مبروك! تمت الإضافة.`;
                     watchAdBtn.disabled = false;
 
-                    // إرسال البيانات للسيرفر (بدون إغلاق التطبيق)
-                    const userId = tg?.initDataUnsafe?.user?.id;
-                    if (userId) {
-                        // ⚠️ هتغير الرابط ده برابط Render الخاص بك بعد شوي
-                        fetch('https://zideot-bot.onrender.com/api/add_points', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ user_id: userId, amount: REWARD_AMOUNT })
-                        }).catch(e => console.log("Fetch error:", e));
-                    }
+                    // إرسال النقاط للسيرفر
+                    fetch('https://zideot-tron.onrender.com/api/add_points', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ user_id: userId, amount: REWARD_AMOUNT })
+                    }).catch(e => console.log(e));
                 })
                 .catch((result) => {
                     if(statusMessage) statusMessage.innerText = "⚠️ لم تكمل مشاهدة الإعلان.";
