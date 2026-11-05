@@ -41,17 +41,46 @@ window.addEventListener('load', function() {
 
     if (showBalanceBtn) showBalanceBtn.addEventListener('click', () => tg.showAlert(`💎 رصيدك الحالي: ${currentBalance.toFixed(7)} TRX`));
     
-    // زر الإحالات
-    if (showRefsBtn) showRefsBtn.addEventListener('click', () => tg.showAlert(`👥 عدد إحالاتك: ${refsCount}\n\nكل 100 إحالة = 1.0000000 TRX`));
+    // إصلاح مشكلة الإحالات باستخدام Popup بدل Alert
+    if (showRefsBtn) {
+        showRefsBtn.addEventListener('click', () => {
+            tg.showPopup({
+                title: 'إحالاتي 👥',
+                message: `عدد إحالاتك: ${refsCount}\n\nكل 100 إحالة = 1.0000000 TRX`,
+                buttons: [{type: 'ok'}]
+            });
+        });
+    }
 
-    // زر السحب
+    // منطق زر السحب الجديد
     if (withdrawBtn) {
         withdrawBtn.addEventListener('click', () => {
-            if (currentBalance >= 10.0) {
-                tg.showAlert("✅ طلب السحب قيد المعالجة!\nسيتم تحويل المبلغ إلى محفظتك قريباً. يرجى التواصل مع الدعم لإكمال العملية.");
-                // هنا ممكن تضيف كود يبعت إشعار للمطور عشان يحول المبلغ
+            if (currentBalance < 10.0) {
+                tg.showPopup({
+                    title: 'تحتاج المزيد! 💎',
+                    message: `الحد الأدنى للسحب هو 10.0000000 TRX.\nرصيدك الحالي: ${currentBalance.toFixed(7)} TRX\n\nاستمر في مشاهدة الإعلانات لجمع المزيد!`,
+                    buttons: [{type: 'ok'}]
+                });
             } else {
-                tg.showAlert(`⚠️ الحد الأدنى للسحب هو 10.0000000 TRX.\nرصيدك الحالي: ${currentBalance.toFixed(7)} TRX\n\nاستمر في جمع النقاط!`);
+                // طلب عنوان المحفظة
+                const wallet = prompt("💳 يرجى إدخال عنوان محفظة TRON (TRC20) الخاصة بك:");
+                if (wallet && wallet.length > 20) {
+                    fetch('https://zideot-tron.onrender.com/api/withdraw', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ user_id: userId, wallet: wallet })
+                    }).then(res => res.json()).then(data => {
+                        if (data.status === 'success') {
+                            tg.showAlert("✅ تم استلام طلبك!\nسيتم تحويل المبلغ إلى محفظتك في غضون بضع ساعات.");
+                            currentBalance -= 10.0;
+                            updateUI();
+                        } else {
+                            tg.showAlert("❌ حدث خطأ: " + data.message);
+                        }
+                    }).catch(e => tg.showAlert("❌ فشل الاتصال بالسيرفر"));
+                } else if (wallet) {
+                    tg.showAlert("⚠️ عنوان المحفظة غير صحيح. يرجى المحاولة مرة أخرى.");
+                }
             }
         });
     }

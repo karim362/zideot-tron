@@ -15,17 +15,13 @@ bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask(__name__)
 CORS(app)
 
-# إضافة زر /start الثابت في قائمة البوت
 try:
-    bot.set_my_commands([
-        types.BotCommand("/start", "القائمة الرئيسية 🏠")
-    ])
+    bot.set_my_commands([types.BotCommand("/start", "القائمة الرئيسية 🏠")])
 except Exception as e:
     print("Error setting commands:", e)
 
 def get_db_connection():
-    conn = psycopg2.connect(DATABASE_URL, sslmode='require')
-    return conn
+    return psycopg2.connect(DATABASE_URL, sslmode='require')
 
 def init_db():
     conn = get_db_connection()
@@ -38,7 +34,6 @@ def init_db():
     conn.commit()
     c.close()
     conn.close()
-
 init_db()
 
 def get_user(user_id):
@@ -98,7 +93,7 @@ def send_welcome(message):
 
     markup = types.InlineKeyboardMarkup()
     btn_app = types.InlineKeyboardButton(
-        text="🔥 ابدأ الربح الآن (مشاهدة إعلانات)", 
+        text="🔥 ابدأ الربح الآن", 
         web_app=types.WebAppInfo(url=f"https://zideot-tron-karim.netlify.app/?user_id={user_id}&balance={balance}&refs={referrals}") 
     )
     btn_balance = types.InlineKeyboardButton("💳 رصيدي الحالي", callback_data="check_balance")
@@ -106,19 +101,13 @@ def send_welcome(message):
     
     bot_info = bot.get_me()
     ref_link = f"https://t.me/{bot_info.username}?start={user_id}"
-    
-    # إصلاح مشكلة نص الإحالة اللي بيختفي (تشفير النص)
     share_text = urllib.parse.quote("🔥 انضم إليّ في Zideot Tron واربح عملة TRON مجاناً من مشاهدة الإعلانات! اضغط هنا:")
-    btn_share = types.InlineKeyboardButton(
-        text="🎁 دعوة أصدقائك (اربح TRX)", 
-        url=f"https://t.me/share/url?url={ref_link}&text={share_text}"
-    )
+    btn_share = types.InlineKeyboardButton(text="🎁 دعوة أصدقائك (اربح TRX)", url=f"https://t.me/share/url?url={ref_link}&text={share_text}")
     
     markup.add(btn_app)
     markup.add(btn_balance, btn_refs)
     markup.add(btn_share)
 
-    # رسالة الترحيب الجديدة (جذابة وتشد للضغط)
     welcome_text = (
         f"🔥 **هل أنت مستعد لتحويل وقتك إلى أرباح حقيقية؟!** 💸\n\n"
         f"🚀 **مرحباً بك في Zideot Tron** - منصتك الأولى لربح عملة TRX مجاناً!\n\n"
@@ -135,13 +124,16 @@ def send_welcome(message):
 def callback_balance(call):
     user = get_user(call.from_user.id)
     balance = user['balance'] if user else 0.0
-    bot.answer_callback_query(call.id, f"💎 رصيدك الحالي: {balance:.7f} TRX", show_alert=True)
+    # استخدام علامة RTL عشان النص يظهر صح
+    bot.answer_callback_query(call.id, f"\u200F💎 رصيدك الحالي: {balance:.7f} TRX", show_alert=True)
 
 @bot.callback_query_handler(func=lambda call: call.data == "check_refs")
 def callback_refs(call):
     user = get_user(call.from_user.id)
     refs = user['referrals'] if user else 0
-    bot.answer_callback_query(call.id, f"👥 عدد إحالاتك: {refs}\n\n(كل 100 إحالة = 1.0000000 TRX)", show_alert=True)
+    # إضافة علامة RTL في بداية كل سطر عشان مشكلة الاختفاء
+    alert_text = f"\u200F👥 عدد إحالاتك: {refs}\n\n\u200Fكل 100 إحالة = 1.0000000 TRX"
+    bot.answer_callback_query(call.id, alert_text, show_alert=True)
 
 @app.route('/')
 def index():
@@ -156,7 +148,7 @@ def api_add_points():
         add_points(user_id, amount)
         user = get_user(user_id)
         new_balance = user['balance']
-        text = f"✅ **تمت إضافة المكافأة بنجاح!**\n\n💰 تم إضافة: `+{amount:.7f} TRX` إلى حسابك.\n💎 إجمالي رصيدك: `{new_balance:.7f} TRX`\n\nاستمر في الربح! 🚀"
+        text = f"✅ **تمت إضافة المكافأة بنجاح!**\n\n💰 تم إضافة: `+{amount:.7f} TRX`\n💎 إجمالي رصيدك: `{new_balance:.7f} TRX`\n\nاستمر في الربح! 🚀"
         bot.send_message(user_id, text, parse_mode='Markdown')
         return jsonify({"status": "success", "new_balance": new_balance}), 200
     except Exception as e:
@@ -168,6 +160,33 @@ def api_get_user(user_id):
     if user:
         return jsonify({"status": "success", "balance": user['balance'], "referrals": user['referrals']}), 200
     return jsonify({"status": "not_found", "balance": 0.0, "referrals": 0}), 200
+
+# مسار السحب الجديد
+@app.route('/api/withdraw', methods=['POST'])
+def api_withdraw():
+    try:
+        data = request.json
+        user_id = int(data.get('user_id'))
+        wallet = data.get('wallet')
+        amount = 10.0 # السحب ثابت 10 حالياً
+
+        user = get_user(user_id)
+        if not user or user['balance'] < amount:
+            return jsonify({"status": "error", "message": "رصيد غير كافٍ"}), 400
+
+        conn = get_db_connection()
+        c = conn.cursor()
+        c.execute("UPDATE users SET balance = balance - %s WHERE user_id = %s", (amount, user_id))
+        conn.commit()
+        c.close()
+        conn.close()
+
+        text = f"✅ **تم استلام طلب السحب بنجاح!**\n\n💸 المبلغ: `10.0000000 TRX`\n💳 المحفظة: `{wallet}`\n\n⏳ سيتم تحويل المبلغ في غضون بضع ساعات. شكراً لك!"
+        bot.send_message(user_id, text, parse_mode='Markdown')
+        
+        return jsonify({"status": "success", "message": "تم السحب"}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 def run_polling():
     bot.infinity_polling()
