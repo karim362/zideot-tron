@@ -3,12 +3,14 @@ from telebot import types
 import sqlite3
 import os
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import threading
 
 # قراءة التوكن من إعدادات Render
 BOT_TOKEN = os.environ.get('BOT_TOKEN', 'ضع_التوكن_هنا_كاحتياط')
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask(__name__)
+CORS(app)
 
 # إعداد قاعدة البيانات
 def init_db():
