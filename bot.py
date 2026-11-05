@@ -67,8 +67,9 @@ def add_referral(referrer_id):
     c.execute("UPDATE users SET referrals = referrals + 1 WHERE user_id = %s", (referrer_id,))
     c.execute("SELECT referrals FROM users WHERE user_id = %s", (referrer_id,))
     result = c.fetchone()
-    if result and result[0] % 100 == 0:
-        c.execute("UPDATE users SET balance = balance + 1.0 WHERE user_id = %s", (referrer_id,))
+    if result:
+        # زيادة فورية بقيمة 0.01 لكل إحالة
+        c.execute("UPDATE users SET balance = balance + 0.01 WHERE user_id = %s", (referrer_id,))
     conn.commit()
     c.close()
     conn.close()
