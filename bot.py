@@ -156,9 +156,21 @@ def api_get_user(user_id):
         return jsonify({"status": "success", "balance": user[1], "referrals": user[2]}), 200
     return jsonify({"status": "not_found", "balance": 0.0, "referrals": 0}), 200
 
-@app.route('/')
-def index():
-    return "Bot API is running!"
+
+# ===== مسار التشخيص =====
+@app.route('/api/diagnostic', methods=['GET'])
+def api_diagnostic():
+    try:
+        conn = get_db_connection()
+        c = conn.cursor()
+        c.execute("SELECT 1")
+        c.close()
+        conn.close()
+        db_status = "شغالة 100%"
+    except Exception as e:
+        db_status = f"خطأ: {str(e)}"
+    return jsonify({"server": "شغال", "database": db_status}), 200
+
 
 # تشغيل البوت في الخلفية عشان يشتغل مع السيرفر
 def run_polling():
