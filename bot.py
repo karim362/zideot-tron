@@ -68,7 +68,6 @@ def add_referral(referrer_id):
     c.execute("SELECT referrals FROM users WHERE user_id = %s", (referrer_id,))
     result = c.fetchone()
     if result:
-        # زيادة فورية بقيمة 0.01 لكل إحالة
         c.execute("UPDATE users SET balance = balance + 0.01 WHERE user_id = %s", (referrer_id,))
     conn.commit()
     c.close()
@@ -99,42 +98,85 @@ def send_welcome(message):
     )
     btn_balance = types.InlineKeyboardButton("💳 رصيدي الحالي", callback_data="check_balance")
     btn_refs = types.InlineKeyboardButton("👥 إحالاتي", callback_data="check_refs")
+    btn_withdraw = types.InlineKeyboardButton("💸 سحب الأرباح", callback_data="withdraw")
     
     bot_info = bot.get_me()
     ref_link = f"https://t.me/{bot_info.username}?start={user_id}"
     share_text = urllib.parse.quote("🔥 انضم إليّ في Zideot Tron واربح عملة TRON مجاناً من مشاهدة الإعلانات! اضغط هنا:")
-    btn_share = types.InlineKeyboardButton(text="🎁 دعوة أصدقائك (اربح TRX)", url=f"https://t.me/share/url?url={ref_link}&text={share_text}")
+    btn_share = types.InlineKeyboardButton(text="🎁 دعوة أصدقائك", url=f"https://t.me/share/url?url={ref_link}&text={share_text}")
     
     markup.add(btn_app)
     markup.add(btn_balance, btn_refs)
-    markup.add(btn_share)
+    markup.add(btn_withdraw, btn_share)
 
     welcome_text = (
         f"🔥 **هل أنت مستعد لتحويل وقتك إلى أرباح حقيقية؟!** 💸\n\n"
         f"🚀 **مرحباً بك في Zideot Tron** - منصتك الأولى لربح عملة TRX مجاناً!\n\n"
-        f"💎 **ماذا تنتظر؟** كل ما عليك فعله هو مشاهدة إعلانات قصيرة، وستجمع النقاط تلو الأخرى!\n\n"
         f"⚡️ **نظام الأرباح السريع:**\n"
         f"👈 كل 100 إعلان = 1.0000000 TRX\n"
-        f"👈 كل 100 إحالة (دعوة أصدقائك) = 1.0000000 TRX\n"
+        f"👈 كل إحالة (دعوة صديق) = 0.0100000 TRX\n"
         f"💳 **الحد الأدنى للسحب:** 10.0000000 TRX\n\n"
-        f"👇 **اضغط على الزر أدناه وابدأ بجمع أول 0.01 TRX الآن!**"
+        f"👇 **اضغط على الزر أدناه وابدأ الربح الآن!**"
     )
     bot.send_message(message.chat.id, welcome_text, parse_mode='Markdown', reply_markup=markup)
 
+# إرسال الرصيد كرسالة عادية بدل التنبيه المقطوع
 @bot.callback_query_handler(func=lambda call: call.data == "check_balance")
 def callback_balance(call):
     user = get_user(call.from_user.id)
     balance = user['balance'] if user else 0.0
-    # استخدام علامة RTL عشان النص يظهر صح
-    bot.answer_callback_query(call.id, f"\u200F💎 رصيدك الحالي: {balance:.7f} TRX", show_alert=True)
+    bot.answer_callback_query(call.id)
+    bot.send_message(call.message.chat.id, f"💎 **رصيدك الحالي:**\n`{balance:.7f} TRX`", parse_mode='Markdown')
 
+# إصلاح رسالة الإحالات لتظهر كرسالة عادية ومكتملة
 @bot.callback_query_handler(func=lambda call: call.data == "check_refs")
 def callback_refs(call):
     user = get_user(call.from_user.id)
     refs = user['referrals'] if user else 0
-    # إضافة علامة RTL في بداية كل سطر عشان مشكلة الاختفاء
-    alert_text = f"\u200F👥 عدد إحالاتك: {refs}\n\n\u200Fكل 100 إحالة = 1.0000000 TRX"
-    bot.answer_callback_query(call.id, alert_text, show_alert=True)
+    bot.answer_callback_query(call.id)
+    text = (
+        f"👥 **عدد إحالاتك:** `{refs}`\n\n"
+        f"💰 **مكافأة الإحالة:** `0.0100000 TRX` لكل شخص.\n"
+        f"*(تتم إضافتها تلقائياً لرصيدك بمجرد دخول صديقك من رابطك)*"
+    )
+    bot.send_message(call.message.chat.id, text, parse_mode='Markdown')
+
+# زر السحب في البوت
+@bot.callback_query_handler(func=lambda call: call.data == "withdraw")
+def callback_withdraw(call):
+    user = get_user(call.from_user.id)
+    balance = user['balance'] if user else 0.0
+    if balance < 10.0:
+        # نستخدم رسالة عادية بدل التنبيه
+        bot.answer_callback_query(call.id)
+        bot.send_message(call.message.chat.id, f"⚠️ **عذراً، رصيدك غير كافٍ للسحب.**\n\nالحد الأدنى للسحب: `10.0000000 TRX`\nرصيدك الحالي: `{balance:.7f} TRX`\n\nاستمر في جمع النقاط!", parse_mode='Markdown')
+    else:
+        bot.answer_callback_query(call.id)
+        msg = bot.send_message(call.message.chat.id, "💳 **يرجى إرسال عنوان محفظة TRON (TRC20) الخاصة بك الآن:**")
+        bot.register_next_step_handler(msg, process_withdraw)
+
+def process_withdraw(message):
+    wallet = message.text.strip()
+    if len(wallet) < 20:
+        bot.send_message(message.chat.id, "⚠️ عنوان المحفظة غير صحيح. يرجى المحاولة مرة أخرى من البداية.")
+        return
+    
+    user_id = message.from_user.id
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("UPDATE users SET balance = balance - 10.0 WHERE user_id = %s", (user_id,))
+    conn.commit()
+    c.close()
+    conn.close()
+
+    bot.send_message(
+        message.chat.id, 
+        f"✅ **تم استلام طلب السحب بنجاح!**\n\n"
+        f"💸 المبلغ: `10.0000000 TRX`\n"
+        f"💳 المحفظة: `{wallet}`\n\n"
+        f"⏳ سيتم تحويل المبلغ في غضون بضع ساعات. شكراً لك!", 
+        parse_mode='Markdown'
+    )
 
 @app.route('/')
 def index():
@@ -149,7 +191,7 @@ def api_add_points():
         add_points(user_id, amount)
         user = get_user(user_id)
         new_balance = user['balance']
-        text = f"✅ **تمت إضافة المكافأة بنجاح!**\n\n💰 تم إضافة: `+{amount:.7f} TRX`\n💎 إجمالي رصيدك: `{new_balance:.7f} TRX`\n\nاستمر في الربح! 🚀"
+        text = f"✅ **تمت إضافة المكافأة بنجاح!**\n\n💰 تم إضافة: `+{amount:.7f} TRX`\n💎 إجمالي رصيدك: `{new_balance:.7f} TRX`"
         bot.send_message(user_id, text, parse_mode='Markdown')
         return jsonify({"status": "success", "new_balance": new_balance}), 200
     except Exception as e:
@@ -162,29 +204,24 @@ def api_get_user(user_id):
         return jsonify({"status": "success", "balance": user['balance'], "referrals": user['referrals']}), 200
     return jsonify({"status": "not_found", "balance": 0.0, "referrals": 0}), 200
 
-# مسار السحب الجديد
 @app.route('/api/withdraw', methods=['POST'])
 def api_withdraw():
     try:
         data = request.json
         user_id = int(data.get('user_id'))
         wallet = data.get('wallet')
-        amount = 10.0 # السحب ثابت 10 حالياً
-
+        amount = 10.0
         user = get_user(user_id)
         if not user or user['balance'] < amount:
             return jsonify({"status": "error", "message": "رصيد غير كافٍ"}), 400
-
         conn = get_db_connection()
         c = conn.cursor()
         c.execute("UPDATE users SET balance = balance - %s WHERE user_id = %s", (amount, user_id))
         conn.commit()
         c.close()
         conn.close()
-
-        text = f"✅ **تم استلام طلب السحب بنجاح!**\n\n💸 المبلغ: `10.0000000 TRX`\n💳 المحفظة: `{wallet}`\n\n⏳ سيتم تحويل المبلغ في غضون بضع ساعات. شكراً لك!"
+        text = f"✅ **تم استلام طلب السحب بنجاح!**\n\n💸 المبلغ: `10.0000000 TRX`\n💳 المحفظة: `{wallet}`\n\n⏳ سيتم تحويل المبلغ في غضون بضع ساعات."
         bot.send_message(user_id, text, parse_mode='Markdown')
-        
         return jsonify({"status": "success", "message": "تم السحب"}), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
