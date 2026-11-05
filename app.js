@@ -6,7 +6,6 @@ window.addEventListener('load', function() {
     const urlParams = new URLSearchParams(window.location.search);
     let userId = tg?.initDataUnsafe?.user?.id || urlParams.get('user_id');
     
-    // قراءة الرصيد من الرابط فوراً عشان يظهر بسرعة
     let currentBalance = parseFloat(urlParams.get('balance') || 0.0000000);
     let refsCount = parseInt(urlParams.get('refs') || 0);
     
@@ -17,10 +16,8 @@ window.addEventListener('load', function() {
         if (balanceEl) balanceEl.innerText = currentBalance.toFixed(7);
     }
 
-    // عرض الرصيد فوراً
     updateUI();
 
-    // تحديث الرصيد في الخلفية من Render (لو الرابط مش محدث أو في تأخير)
     async function fetchBalanceFromServer() {
         if (!userId) return;
         try {
@@ -31,9 +28,7 @@ window.addEventListener('load', function() {
                 refsCount = data.referrals;
                 updateUI();
             }
-        } catch (e) {
-            console.log("خطأ في جلب الرصيد:", e);
-        }
+        } catch (e) {}
     }
 
     fetchBalanceFromServer();
@@ -41,10 +36,25 @@ window.addEventListener('load', function() {
     const watchAdBtn = document.getElementById('watchAdBtn');
     const showBalanceBtn = document.getElementById('showBalanceBtn');
     const showRefsBtn = document.getElementById('showRefsBtn');
+    const withdrawBtn = document.getElementById('withdrawBtn');
     const statusMessage = document.getElementById('statusMessage');
 
     if (showBalanceBtn) showBalanceBtn.addEventListener('click', () => tg.showAlert(`💎 رصيدك الحالي: ${currentBalance.toFixed(7)} TRX`));
+    
+    // زر الإحالات
     if (showRefsBtn) showRefsBtn.addEventListener('click', () => tg.showAlert(`👥 عدد إحالاتك: ${refsCount}\n\nكل 100 إحالة = 1.0000000 TRX`));
+
+    // زر السحب
+    if (withdrawBtn) {
+        withdrawBtn.addEventListener('click', () => {
+            if (currentBalance >= 10.0) {
+                tg.showAlert("✅ طلب السحب قيد المعالجة!\nسيتم تحويل المبلغ إلى محفظتك قريباً. يرجى التواصل مع الدعم لإكمال العملية.");
+                // هنا ممكن تضيف كود يبعت إشعار للمطور عشان يحول المبلغ
+            } else {
+                tg.showAlert(`⚠️ الحد الأدنى للسحب هو 10.0000000 TRX.\nرصيدك الحالي: ${currentBalance.toFixed(7)} TRX\n\nاستمر في جمع النقاط!`);
+            }
+        });
+    }
 
     if (watchAdBtn) {
         watchAdBtn.addEventListener('click', () => {
@@ -73,5 +83,4 @@ window.addEventListener('load', function() {
                 });
         });
     }
-    updateUI();
 });

@@ -6,13 +6,22 @@ from psycopg2.extras import DictCursor
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import threading
+import urllib.parse
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask(__name__)
-CORS(app) # تفعيل صلاحيات الاتصال للموقع
+CORS(app)
+
+# إضافة زر /start الثابت في قائمة البوت
+try:
+    bot.set_my_commands([
+        types.BotCommand("/start", "القائمة الرئيسية 🏠")
+    ])
+except Exception as e:
+    print("Error setting commands:", e)
 
 def get_db_connection():
     conn = psycopg2.connect(DATABASE_URL, sslmode='require')
@@ -89,26 +98,36 @@ def send_welcome(message):
 
     markup = types.InlineKeyboardMarkup()
     btn_app = types.InlineKeyboardButton(
-        text="🔥 فتح التطبيق ومشاهدة الإعلانات", 
+        text="🔥 ابدأ الربح الآن (مشاهدة إعلانات)", 
         web_app=types.WebAppInfo(url=f"https://zideot-tron-karim.netlify.app/?user_id={user_id}&balance={balance}&refs={referrals}") 
     )
-    btn_balance = types.InlineKeyboardButton("💳 عرض رصيدي الحالي", callback_data="check_balance")
-    btn_refs = types.InlineKeyboardButton("👥 عرض إحالاتي", callback_data="check_refs")
+    btn_balance = types.InlineKeyboardButton("💳 رصيدي الحالي", callback_data="check_balance")
+    btn_refs = types.InlineKeyboardButton("👥 إحالاتي", callback_data="check_refs")
     
     bot_info = bot.get_me()
     ref_link = f"https://t.me/{bot_info.username}?start={user_id}"
-    btn_share = types.InlineKeyboardButton(text="🎁 رابط الإحالة الخاص بك", url=f"https://t.me/share/url?url={ref_link}&text=اربح معي من Zideot Tron!")
+    
+    # إصلاح مشكلة نص الإحالة اللي بيختفي (تشفير النص)
+    share_text = urllib.parse.quote("🔥 انضم إليّ في Zideot Tron واربح عملة TRON مجاناً من مشاهدة الإعلانات! اضغط هنا:")
+    btn_share = types.InlineKeyboardButton(
+        text="🎁 دعوة أصدقائك (اربح TRX)", 
+        url=f"https://t.me/share/url?url={ref_link}&text={share_text}"
+    )
     
     markup.add(btn_app)
     markup.add(btn_balance, btn_refs)
     markup.add(btn_share)
 
+    # رسالة الترحيب الجديدة (جذابة وتشد للضغط)
     welcome_text = (
-        f"👋 **أهلاً بك في Zideot Tron!** 🚀\n\n"
-        f"🌟 مرحباً بك في منصة الأرباح الأسرع!\n\n"
-        f"⚡️ **ملاحظة:** كل 100 إعلان تعادل 1.0000000 TRX\n"
-        f"👥 **الإحالات:** كل 100 إحالة تعادل 1.0000000 TRX\n\n"
-        f"👇 اضغط على الأزرار أدناه للبدء:"
+        f"🔥 **هل أنت مستعد لتحويل وقتك إلى أرباح حقيقية؟!** 💸\n\n"
+        f"🚀 **مرحباً بك في Zideot Tron** - منصتك الأولى لربح عملة TRX مجاناً!\n\n"
+        f"💎 **ماذا تنتظر؟** كل ما عليك فعله هو مشاهدة إعلانات قصيرة، وستجمع النقاط تلو الأخرى!\n\n"
+        f"⚡️ **نظام الأرباح السريع:**\n"
+        f"👈 كل 100 إعلان = 1.0000000 TRX\n"
+        f"👈 كل 100 إحالة (دعوة أصدقائك) = 1.0000000 TRX\n"
+        f"💳 **الحد الأدنى للسحب:** 10.0000000 TRX\n\n"
+        f"👇 **اضغط على الزر أدناه وابدأ بجمع أول 0.01 TRX الآن!**"
     )
     bot.send_message(message.chat.id, welcome_text, parse_mode='Markdown', reply_markup=markup)
 
